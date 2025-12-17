@@ -10,16 +10,45 @@ module Traceloop
           c.add_span_processor(
             OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(
               OpenTelemetry::Exporter::OTLP::Exporter.new(
-                endpoint: "#{ENV.fetch("TRACELOOP_BASE_URL", "https://api.traceloop.com")}/v1/traces",
-                headers: { "Authorization" => "Bearer #{ENV.fetch("TRACELOOP_API_KEY")}" }
+                endpoint: otlp_endpoint,
+                headers: otlp_headers
               )
             )
           )
-          puts "Traceloop exporting traces to #{ENV.fetch("TRACELOOP_BASE", "https://api.traceloop.com")}"
+          puts "Traceloop exporting traces to #{otlp_endpoint}"
         end
 
         @tracer = OpenTelemetry.tracer_provider.tracer("Traceloop")
       end
+
+      private
+
+      def otlp_endpoint
+        # Support standard OTEL env var, then Traceloop-specific, then default
+        ENV["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] ||
+          ENV["OTEL_EXPORTER_OTLP_ENDPOINT"]&.then { |url| "#{url}/v1/traces" } ||
+          "#{ENV.fetch("TRACELOOP_BASE_URL", "https://api.traceloop.com")}/v1/traces"
+      end
+
+      def otlp_headers
+        # Support standard OTEL env var format: "key1=value1,key2=value2"
+        if ENV["OTEL_EXPORTER_OTLP_HEADERS"]
+          parse_headers(ENV["OTEL_EXPORTER_OTLP_HEADERS"])
+        elsif ENV["TRACELOOP_API_KEY"]
+          { "Authorization" => "Bearer #{ENV["TRACELOOP_API_KEY"]}" }
+        else
+          {}
+        end
+      end
+
+      def parse_headers(headers_string)
+        headers_string.split(",").each_with_object({}) do |pair, hash|
+          key, value = pair.split("=", 2)
+          hash[key.strip] = value&.strip || ""
+        end
+      end
+
+      public
 
       class Tracer
         def initialize(span, provider, model)
