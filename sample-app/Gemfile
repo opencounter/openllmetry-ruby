@@ -3,8 +3,11 @@
 source "https://rubygems.org"
 
 gem "ruby-openai"
-gem "traceloop-sdk"
+gem "traceloop-sdk", path: "../traceloop-sdk"
+gem "opentelemetry-semantic_conventions_ai", path: "../semantic_conventions_ai"
 
 gem "gemini-ai", "~> 4.1"
 
 gem "aws-sdk-bedrockruntime", "~> 1.14"
+
+gem "ruby_llm"

@@ -17,6 +17,9 @@ module OpenTelemetry
       LLM_PROMPTS = "llm.prompts"
       LLM_COMPLETIONS = "llm.completions"
       LLM_CHAT_STOP_SEQUENCES = "llm.chat.stop_sequences"
+      LLM_REQUEST_FUNCTIONS = "llm.request.functions"
+      LLM_USAGE_CACHED_TOKENS = "llm.usage.cached_tokens"
+      LLM_USAGE_CACHE_CREATION_TOKENS = "llm.usage.cache_creation_tokens"
 
       # Vector DB
       VECTOR_DB_VENDOR = "vector_db.vendor"

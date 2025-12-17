@@ -55,11 +55,13 @@ module Traceloop
         end
 
         def log_response(response)
-          if response.respond_to?(:body)
+          if response.respond_to?(:model_id) && response.respond_to?(:input_tokens) && response.respond_to?(:role)
+            log_ruby_llm_response(response)
+          elsif response.respond_to?(:body)
             log_bedrock_response(response)
           # This is Gemini specific, see -
           # https://github.com/gbaptista/gemini-ai?tab=readme-ov-file#generate_content
-          elsif response.has_key?("candidates")
+          elsif response.is_a?(Hash) && response.has_key?("candidates")
             log_gemini_response(response)
           else
             log_openai_response(response)
@@ -119,6 +121,80 @@ module Traceloop
             "#{OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_COMPLETIONS}.0.role" => response.dig("choices", 0, "message", "role"),
             "#{OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_COMPLETIONS}.0.content" => response.dig("choices", 0, "message", "content")
             })
+          end
+        end
+
+        def log_ruby_llm_response(response)
+          @span.add_attributes({
+            OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_RESPONSE_MODEL => response.model_id,
+          })
+
+          input_tokens = response.input_tokens || 0
+          output_tokens = response.output_tokens || 0
+
+          if input_tokens > 0 || output_tokens > 0
+            @span.add_attributes({
+              OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_USAGE_PROMPT_TOKENS => input_tokens,
+              OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_USAGE_COMPLETION_TOKENS => output_tokens,
+              OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_USAGE_TOTAL_TOKENS => input_tokens + output_tokens,
+            })
+          end
+
+          if response.respond_to?(:cached_tokens) && response.cached_tokens
+            @span.add_attributes({
+              OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_USAGE_CACHED_TOKENS => response.cached_tokens,
+            })
+          end
+          if response.respond_to?(:cache_creation_tokens) && response.cache_creation_tokens
+            @span.add_attributes({
+              OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_USAGE_CACHE_CREATION_TOKENS => response.cache_creation_tokens,
+            })
+          end
+
+          content = extract_ruby_llm_content(response.content)
+          @span.add_attributes({
+            "#{OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_COMPLETIONS}.0.role" => response.role.to_s,
+            "#{OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_COMPLETIONS}.0.content" => content,
+          })
+
+          if response.respond_to?(:tool_calls) && response.tool_calls && !response.tool_calls.empty?
+            log_ruby_llm_tool_calls(response.tool_calls)
+          end
+        end
+
+        def log_functions(functions)
+          @span.add_attributes({
+            OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_REQUEST_FUNCTIONS => functions.to_json
+          })
+        end
+
+        private
+
+        def extract_ruby_llm_content(content)
+          case content
+          when String
+            content
+          when nil
+            ""
+          else
+            content.respond_to?(:text) ? content.text.to_s : content.to_s
+          end
+        end
+
+        def log_ruby_llm_tool_calls(tool_calls)
+          tool_calls.each_with_index do |tool_call, index|
+            prefix = "#{OpenTelemetry::SemanticConventionsAi::SpanAttributes::LLM_COMPLETIONS}.0.tool_calls.#{index}"
+
+            attributes = {}
+            attributes["#{prefix}.id"] = tool_call.id if tool_call.respond_to?(:id) && tool_call.id
+            attributes["#{prefix}.name"] = tool_call.name if tool_call.respond_to?(:name) && tool_call.name
+
+            if tool_call.respond_to?(:arguments) && tool_call.arguments
+              args = tool_call.arguments
+              attributes["#{prefix}.arguments"] = args.is_a?(String) ? args : args.to_json
+            end
+
+            @span.add_attributes(attributes) unless attributes.empty?
           end
         end
       end

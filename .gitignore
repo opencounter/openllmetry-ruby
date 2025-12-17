@@ -13,6 +13,9 @@
 # Used by dotenv library to load environment variables.
 # .env
 
+# direnv
+.envrc
+
 # Ignore Byebug command history file.
 .byebug_history
 
